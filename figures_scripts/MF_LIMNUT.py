@@ -29,7 +29,6 @@ import glob
 import csv
 import re
 import argparse
-sys.path.append('/gpfs/home/mep22dku/scratch/AMOC-eco/NEMO5/scripts')
 
 from datetime import datetime
 import numpy as np
@@ -39,18 +38,19 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.patches import Patch
 
 import map_maker as mm
+import plot_style as ps
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--suffix', default='', help="'' or '_lv95' (must match the files you regridded)")
 ap.add_argument('--mixed-below', type=float, default=0.6, help='top share below this -> mixed')
 ap.add_argument('--csv', default=None, help='stats csv for the bar figure (default: newest matching in /gpfs/home/mep22dku/scratch/AMOC-TOM/plts)')
-ap.add_argument('--no-watermark', action='store_true')
+ap.add_argument('--no-watermark', '--water-off', dest='no_watermark', action='store_true')
 ap.add_argument('--table-only', action='store_true', help='print the assemblage table from the stats CSV and exit (no maps, no figures)')
 args, _ = ap.parse_known_args()
 
 # ---- tunable -----------------------------------------------------------
 WATERMARK = "/gpfs/home/mep22dku/scratch/AMOC-TOM/figures_scripts/MF_LIMNUT.py"
-OUTPUT_DIR = "/gpfs/home/mep22dku/scratch/AMOC-TOM/plts"
+OUTPUT_DIR = ps.output_dir()   # figure_settings.yml
 CLIMS = os.environ.get('LIMNUT_CLIMS', '/gpfs/data/greenocean/users/mep22dku/clims')
 RUNS = [('HA01', 'TOM12_TJ_HA01'), ('HH01', 'TOM12_TJ_HH01')]          # control, hose
 SCHEME = 'top14'
@@ -61,7 +61,7 @@ COLORS = {'Fe': '#d95f02', 'N': '#5f8a4f', 'P': '#7570b3', 'Si': '#2f6690',     
 ROW_LABEL_X = -0.18
 LV_BASE_CMAP, LV_DIFF_CMAP = 'Greys_r', 'PuOr'      # as MF_PRIM: lighter = less limited
 SUFFIX = args.suffix
-WATER_ON = not args.no_watermark
+WATER_ON = ps.watermark_from_settings() and not args.no_watermark   # yaml switch; flags only switch it off
 
 
 def rg_path(label, folder):
@@ -92,10 +92,22 @@ def dominant(fracs, codes, ncat, mixed_below):
     return np.where(valid, idx, np.nan), np.where(valid, top, np.nan)
 
 
-def panel(ax, lon, lat, data, cmap, vmin, vmax, ctx, tag):
+LETTERS_ASSEMBLAGE = True      # panel letters a), b), ... on the assemblage figure (Fig 5)
+LETTERS_GROUPS = True           # and on the per-group figure; set False to leave them off
+
+
+def letter(i, on=True):
+    '''Panel letter text: 'a)' for 0, 'b)' for 1, ... (row by row), or None when letters are off.'''
+    return ("abcdefghijklmnopqrstuvwxyz"[i] + ")") if on else None
+
+
+def panel(ax, lon, lat, data, cmap, vmin, vmax, ctx, tag, letter=None):
     try:
-        return mm._draw_panel(ax, lon, lat, data, cmap, vmin, vmax,
+        mesh = mm._draw_panel(ax, lon, lat, data, cmap, vmin, vmax,
                               ctx['lon_m'], ctx['lat_m'], ctx['masks'], extent=ctx['extent'])
+        if letter:
+            ps.panel_letter_inside(ax, letter)
+        return mesh
     except Exception as exc:
         print('    [warn] %s failed (%r), left blank' % (tag, exc))
         ax.clear()
@@ -103,28 +115,46 @@ def panel(ax, lon, lat, data, cmap, vmin, vmax, ctx, tag):
         return None
 
 
+CAT_LABELS = {'mixed': 'mix'}          # shorter label on the categorical colorbars
+CAT_LABEL_PT = ps.font_small() - 1      # their label size (pt, 6 with the default 7); six labels must fit under one map width
+
+
+def fit_cbar_to_map(ax, cax):
+    '''Make a colorbar exactly as wide as its map.'''
+    ax.apply_aspect()
+    p, cp = ax.get_position(), cax.get_position()
+    cax.set_position([p.x0, cp.y0, p.width, cp.height])
+
+
 def cat_cbar(fig, cax, names, colors):
     cm = ListedColormap(colors)
     norm = BoundaryNorm(np.arange(-0.5, len(names) + 0.5, 1.0), cm.N)
     cb = fig.colorbar(ScalarMappable(norm=norm, cmap=cm), cax=cax, orientation='horizontal',
                       ticks=range(len(names)))
-    cb.ax.set_xticklabels(names)
+    labels = [CAT_LABELS.get(n, n) for n in names]
+    # labels are drawn as text (tick labels reset their position at every draw); with six categories
+    # n.c. would touch mix, so it is pushed a quarter of a segment to the right
+    cb.ax.set_xticklabels([])
+    shift = {len(names) - 1: 0.25} if len(names) > 5 else {}
+    for i, lab in enumerate(labels):
+        cb.ax.text(i + shift.get(i, 0.0), -0.6, lab, transform=cb.ax.get_xaxis_transform(),
+                   ha='center', va='top', fontsize=CAT_LABEL_PT)
     cb.outline.set_visible(False)
-    cb.ax.tick_params(labelsize=plt.rcParams['font.size'] - 5, length=0)
+    cb.ax.tick_params(labelsize=CAT_LABEL_PT, length=0)
     return cb
 
 
 def cont_cbar(fig, mesh, cax, label=None):
     cb = fig.colorbar(mesh, cax=cax, orientation='horizontal')
     cb.outline.set_visible(False)
-    cb.ax.tick_params(labelsize=plt.rcParams['font.size'] - 2)
+    cb.ax.tick_params(labelsize=ps.font_small())
     try:
         cb.formatter = mm._value_formatter()
         cb.update_ticks()
     except Exception:
         pass
     if label:
-        cb.set_label(label, fontsize=plt.rcParams['font.size'] - 2)
+        cb.set_label(label, fontsize=ps.font_small())
     return cb
 
 
@@ -209,7 +239,7 @@ def main():
             sys.exit('no stats csv matching %s (run make_limiter_maps.py in this folder, or pass --csv)' % pat)
         print_table(path)
         return
-    mm.set_presentation_style()
+    ps.apply_figure_style()
     lon_min, lon_max, lat_min, lat_max = mm._load_extent()
     lon_m, lat_m, masks = mm.load_region_masks(mm.MASK_PATH)
     ctx = dict(lon_m=lon_m, lat_m=lat_m, masks=masks, extent=[lon_min, lon_max, lat_min, lat_max])
@@ -248,17 +278,18 @@ def main():
     diff_cmap = mm._resolve_cmap(None, mm.DIFF_CMAP_NAME, mm.DIFF_CMAP_FALLBACK)
 
     ncols = len(cats) + 1
-    fig = plt.figure(figsize=(2.5 * ncols + 0.6, 8.6))
-    gs = fig.add_gridspec(2, ncols, hspace=0.20, wspace=0.03,
+    fig = plt.figure(figsize=ps.figsize('MF_LIMNUT_assemblage', 2.5 * ncols + 0.6, 8.6))
+    gs = fig.add_gridspec(2, ncols, hspace=ps.keep_gap(0.20, fig), wspace=0.03,
                           width_ratios=[1.0] * (ncols - 1) + [1.3])      # last column a bit wider for its colorbar labels
-    fig.subplots_adjust(top=0.93, bottom=0.07 if WATER_ON else 0.03, left=0.03, right=0.99)
+    fig.subplots_adjust(top=ps.keep_top(0.93, fig), bottom=ps.keep_bottom(0.07 if WATER_ON else 0.03, fig), left=0.03, right=0.99)
     for j, c in enumerate(cats):
         seq = LinearSegmentedColormap.from_list(c, ['#ffffff', COLORS[c]])
         for row, (data, cm, lo, hi, lab) in enumerate([
                 (F[ca][c][2], seq, 0.0, 1.0, 'share of biomass-months'),
                 (diffs[c], diff_cmap, -dmax, dmax, r'$\Delta$ share')]):
             ax, cax = cell(fig, gs[row, j])
-            mesh = panel(ax, lon, lat, data, cm, lo, hi, ctx, '%s row %d' % (c, row))
+            mesh = panel(ax, lon, lat, data, cm, lo, hi, ctx, '%s row %d' % (c, row),
+                         letter=letter(row * ncols + j, LETTERS_ASSEMBLAGE))
             if row == 0:
                 ax.set_title(c + (' (fixer: N2-fixation dependent)' if False else ''), fontweight='bold')
             if j == 0:
@@ -270,21 +301,25 @@ def main():
                 cont_cbar(fig, mesh, cax, lab)
     cm_cat = ListedColormap(colors)
     ax, cax = cell(fig, gs[0, ncols - 1], wide=True)
-    panel(ax, lon, lat, dom[ca], cm_cat, -0.5, len(names) - 0.5, ctx, 'dominant control')
+    panel(ax, lon, lat, dom[ca], cm_cat, -0.5, len(names) - 0.5, ctx, 'dominant control',
+          letter=letter(ncols - 1, LETTERS_ASSEMBLAGE))
     ax.set_title('Dominant limiter', fontweight='bold')
     cat_cbar(fig, cax, names, colors)
+    fit_cbar_to_map(ax, cax)
     changed = np.where(np.isfinite(dom[ca]) & np.isfinite(dom[cb_]) & (dom[ca] != dom[cb_]), dom[cb_], np.nan)
     ok = np.isfinite(dom[ca]) & np.isfinite(dom[cb_])
     changed = np.where(ok & ~np.isfinite(changed), float(len(names)), changed)       # 'no change'
-    names2 = names + ['same']
-    colors2 = colors + [COLORS['no change']]       # 'same' = dominant limiter unchanged
+    names2 = names + ['n.c.']
+    colors2 = colors + [COLORS['no change']]       # 'n.c.' = no change in the dominant limiter (explain in the caption)
     ax, cax = cell(fig, gs[1, ncols - 1], wide=True)
-    panel(ax, lon, lat, changed, ListedColormap(colors2), -0.5, len(names2) - 0.5, ctx, 'dominant changed')
+    panel(ax, lon, lat, changed, ListedColormap(colors2), -0.5, len(names2) - 0.5, ctx, 'dominant changed',
+          letter=letter(2 * ncols - 1, LETTERS_ASSEMBLAGE))
     cat_cbar(fig, cax, names2, colors2)
+    fit_cbar_to_map(ax, cax)
     if WATER_ON:
-        fig.text(0.5, 0.008, WATERMARK, ha='center', va='bottom', fontsize=plt.rcParams['font.size'] - 6, color='0.55')
+        fig.text(0.5, 0.008, WATERMARK, ha='center', va='bottom', fontsize=ps.font_watermark(), color='0.55')
     out = '%s/MF_LIMNUT_assemblage%s_%s.png' % (OUTPUT_DIR, SUFFIX, stamp)
-    fig.savefig(out, bbox_inches='tight', dpi=300)
+    fig.savefig(out, bbox_inches='tight', dpi=ps.dpi())
     print('saved ' + out)
     plt.close(fig)
 
@@ -314,9 +349,9 @@ def main():
         dvl = mm._diff_limit(np.concatenate([atl(lon, lat, d) for d in dl.values()]))
         lv_base = mm._resolve_cmap(LV_BASE_CMAP, mm.DEFAULT_CMAP_NAME, mm.CMAP_FALLBACK)
         lv_diff = plt.get_cmap(LV_DIFF_CMAP)
-        fig = plt.figure(figsize=(3.0 * len(SPECIES), 13.2))
-        gs = fig.add_gridspec(4, 1, hspace=0.16)
-        fig.subplots_adjust(top=0.95, bottom=0.05 if WATER_ON else 0.02, left=0.04, right=0.99)
+        fig = plt.figure(figsize=ps.figsize('MF_LIMNUT_groups', 3.0 * len(SPECIES), 13.2))
+        gs = fig.add_gridspec(4, 1, hspace=ps.keep_gap(0.16, fig))
+        fig.subplots_adjust(top=ps.keep_top(0.95, fig), bottom=ps.keep_bottom(0.05 if WATER_ON else 0.02, fig), left=0.04, right=0.99)
         rows = [('LV control', 'lv', ca), (r'$\Delta$ LV (hose$-$control)', 'dlv', None),
                 ('Dominant limiter, control', 'dom', ca), ('Dominant limiter, hose', 'dom', cb_)]
         for row, (rlabel, kind, lab) in enumerate(rows):
@@ -326,16 +361,19 @@ def main():
             for j, sp in enumerate(SPECIES):
                 ax = fig.add_subplot(block[0, j], projection=mm.ATLANTIC_PROJ)
                 if kind == 'lv' and LV[(ca, sp)] is not None:
-                    mesh = panel(ax, lon, lat, LV[(ca, sp)][2], lv_base, lv_lo, lv_hi, ctx, 'LV ' + sp) or mesh
+                    mesh = panel(ax, lon, lat, LV[(ca, sp)][2], lv_base, lv_lo, lv_hi, ctx, 'LV ' + sp,
+                                 letter=letter(row * len(SPECIES) + j, LETTERS_GROUPS)) or mesh
                 elif kind == 'dlv' and sp in dl:
-                    mesh = panel(ax, lon, lat, dl[sp], lv_diff, -dvl, dvl, ctx, 'dLV ' + sp) or mesh
+                    mesh = panel(ax, lon, lat, dl[sp], lv_diff, -dvl, dvl, ctx, 'dLV ' + sp,
+                                 letter=letter(row * len(SPECIES) + j, LETTERS_GROUPS)) or mesh
                 elif kind == 'dom' and domg[(lab, sp)] is not None:
-                    panel(ax, lon, lat, domg[(lab, sp)], ListedColormap(colors), -0.5, len(names) - 0.5, ctx, 'dom ' + sp)
+                    panel(ax, lon, lat, domg[(lab, sp)], ListedColormap(colors), -0.5, len(names) - 0.5, ctx, 'dom ' + sp,
+                          letter=letter(row * len(SPECIES) + j, LETTERS_GROUPS))
                 if row == 0:
                     ax.set_title(sp + ('*' if sp == 'FIX' else ''), fontweight='bold')
                 if j == 0:
                     ax.text(-0.22, 0.5, rlabel, transform=ax.transAxes, rotation=90, ha='center',
-                            va='center', fontweight='bold', fontsize=plt.rcParams['font.size'] - 2)
+                            va='center', fontweight='bold', fontsize=ps.font_small())
             if kind == 'dom':
                 cat_cbar(fig, cax, names, colors)
             elif mesh is not None:
@@ -344,11 +382,11 @@ def main():
                 cax.axis('off')
         fig.text(0.5, 0.025 if WATER_ON else 0.008,
                  '*FIX: an "N" label means growth that depends on N2 fixation (its N factor cannot fall below 0.56), not DIN starvation.',
-                 ha='center', va='bottom', fontsize=plt.rcParams['font.size'] - 4, color='0.35')
+                 ha='center', va='bottom', fontsize=ps.font_small(), color='0.35')
         if WATER_ON:
-            fig.text(0.5, 0.005, WATERMARK, ha='center', va='bottom', fontsize=plt.rcParams['font.size'] - 6, color='0.55')
+            fig.text(0.5, 0.005, WATERMARK, ha='center', va='bottom', fontsize=ps.font_watermark(), color='0.55')
         out = '%s/MF_LIMNUT_groups%s_%s.png' % (OUTPUT_DIR, SUFFIX, stamp)
-        fig.savefig(out, bbox_inches='tight', dpi=300)
+        fig.savefig(out, bbox_inches='tight', dpi=ps.dpi())
         print('saved ' + out)
         plt.close(fig)
 
@@ -364,7 +402,7 @@ def main():
         if scope == 'ALL' and metric.startswith('frac_') and basis == 'biomass':
             vals[(rg, metric[5:])] = (v[0], v[1])
     regs = [r for r in ('NHL', 'NA', 'SA', 'SO', 'AB', 'ocean') if any(k[0] == r for k in vals)]
-    fig, ax = plt.subplots(figsize=(1.9 * len(regs) + 1.5, 4.6))
+    fig, ax = plt.subplots(figsize=ps.figsize('MF_LIMNUT_bars', 1.9 * len(regs) + 1.5, 4.6))
     w = 0.36
     for i, reg in enumerate(regs):
         for k, lab in enumerate((head[4], head[5])):
@@ -375,7 +413,7 @@ def main():
                     ax.bar(i + (k - 0.5) * (w + 0.04), v, w, bottom=bottom, color=COLORS[c], edgecolor='white', linewidth=0.5,
                            label=c if (i == 0 and k == 0) else None)
                     bottom += v
-            ax.text(i + (k - 0.5) * (w + 0.04), -0.045, ['C', 'H'][k], ha='center', va='top', fontsize=9)
+            ax.text(i + (k - 0.5) * (w + 0.04), -0.045, ['C', 'H'][k], ha='center', va='top', fontsize=ps.font_small())
     ax.set_xticks(range(len(regs)))
     ax.set_xticklabels(regs, fontweight='bold')
     ax.tick_params(axis='x', pad=22)
@@ -384,9 +422,11 @@ def main():
     ax.legend(ncol=len(cats), loc='upper center', bbox_to_anchor=(0.5, 1.12), frameon=False)
     for s in ('top', 'right'):
         ax.spines[s].set_visible(False)
-    ax.set_title('C = control, H = hose; assemblage, %s' % SCHEME, fontsize=9, color='0.4', pad=24)
+    ax.set_title('C = control, H = hose; assemblage, %s' % SCHEME, fontsize=ps.font_small(), color='0.4', pad=24)
+    if WATER_ON:
+        fig.text(0.5, 0.005, WATERMARK, ha='center', va='bottom', fontsize=ps.font_watermark(), color='0.55')
     out = '%s/MF_LIMNUT_bars%s_%s.png' % (OUTPUT_DIR, SUFFIX, stamp)
-    fig.savefig(out, bbox_inches='tight', dpi=300)
+    fig.savefig(out, bbox_inches='tight', dpi=ps.dpi())
     print('saved %s (from %s)' % (out, path))
 
 

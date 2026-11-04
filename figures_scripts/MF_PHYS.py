@@ -38,21 +38,24 @@ GRID_T_FILETYPE = "grid_T"
 ICEMOD_FILETYPE = "icemod"
 
 ROW_LABELS  = ["CONTROL", "HOSE\u2212CONTROL"]
+MAP_BORDER_LW = 1.5      # study-region outlines on the maps (pt); was 1.0 from figure_settings.yml
 ROW_LABEL_X = -0.18
 
-# (variable, cmap, display title, units, (vmin,vmax) BASE override or None)
+# (variable, cmap, display title, units, (vmin,vmax) of the CONTROL row or None for automatic,
+#  (vmin,vmax) of the HOSE-CONTROL row or None for automatic)
 COLUMNS = [
-    ("tos",      "thermal", "SST",  "\u00b0C", None),
-    ("sos",      "haline",  "SSS",  "psu",     (30, 37)),
-    ("mldr10_1", "deep",    "MLD",  "m",       None),
+    ("tos",      "thermal", "SST",  "\u00b0C", None,      (-1.5, 1.5)),
+    ("sos",      "haline",  "SSS",  "psu",     (32, 39),  None),
+    ("mldr10_1", "deep",    "MLD",  "m",       (0, 200),  (-50, 50)),
 ]
 
 # sea-ice column, included unless --no-ice is passed
-ICE_COLUMN = ("icethic", "ice", "Sea ice thickness", "m", None)
+ICE_COLUMN = ("icethic", "ice", "Sea ice thickness", "m", None, None)
 
 # ── setup ──────────────────────────────────────────────────────────────
 def make_figure(watermark=True, with_ice=True):
     ps.apply_figure_style()
+    mm.MASK_LINEWIDTHS = {r: MAP_BORDER_LW for r in mm.MASK_REGIONS}   # thicker outlines, this figure only
 
     columns = COLUMNS + [ICE_COLUMN] if with_ice else COLUMNS
 
@@ -67,7 +70,7 @@ def make_figure(watermark=True, with_ice=True):
     fig = plt.figure(figsize=ps.figsize(FIGURE_CODE, 3.4 * n_cols, 9.0))
     outer_gs = fig.add_gridspec(2, n_cols, height_ratios=[3, 3],
                                  hspace=ps.keep_gap(0.18, fig), wspace=0.06)
-    fig.subplots_adjust(top=ps.keep_top(0.94, fig), bottom=ps.keep_bottom(0.07 if (watermark and WATERMARK_ON) else 0.03, fig),
+    fig.subplots_adjust(top=1 - 0.30 / fig.get_figheight(), bottom=ps.keep_bottom(0.07 if (watermark and WATERMARK_ON) else 0.03, fig),
                         left=0.06, right=0.99)
 
     diff_cmap = mm._resolve_cmap(None, mm.DIFF_CMAP_NAME, mm.DIFF_CMAP_FALLBACK)
@@ -75,7 +78,7 @@ def make_figure(watermark=True, with_ice=True):
     def col_paths(var):
         return ice_paths if var == ICE_COLUMN[0] else paths
 
-    for ci, (var, cmap_name, title, units, base_override) in enumerate(columns):
+    for ci, (var, cmap_name, title, units, base_override, diff_override) in enumerate(columns):
         cmap = mm._resolve_cmap(cmap_name, mm.DEFAULT_CMAP_NAME, mm.CMAP_FALLBACK)
 
         lon, lat, field_a, _ = mm.load_field(col_paths(var)[run_a], var, 0)
@@ -89,11 +92,15 @@ def make_figure(watermark=True, with_ice=True):
             vmin, vmax = base_override
         else:
             vmin, vmax = mm._percentile_limits(atl_a, mm.BASE_PERCENTILES)
-        dvmax = mm._diff_limit(atl_d)
+        if diff_override is not None:
+            dlo, dhi = diff_override
+        else:
+            dvmax = mm._diff_limit(atl_d)
+            dlo, dhi = -dvmax, dvmax
 
         row_specs = [
-            (field_a, cmap,      vmin,   vmax),
-            (diff,    diff_cmap, -dvmax, dvmax),
+            (field_a, cmap,      vmin, vmax),
+            (diff,    diff_cmap, dlo,  dhi),
         ]
 
         for row, (field, cm, lo, hi) in enumerate(row_specs):
@@ -115,6 +122,7 @@ def make_figure(watermark=True, with_ice=True):
                         ha="center", va="center", fontsize=ps.font_small(), color="0.5")
                 continue
 
+            ps.panel_letter_inside(ax, "%s)" % "abcdefgh"[row * n_cols + ci])
             if row == 0:
                 ax.set_title(title, fontweight="bold")
             if ci == 0:

@@ -65,7 +65,10 @@ MASK_PATH    = os.path.expanduser(
 MASK_REGIONS = ["NHL", "NA", "SA", "SO"]
 MASK_COLORS  = {"NHL": BAUHAUS[3], "NA": BAUHAUS[2],
                 "SA": BAUHAUS[1], "SO": BAUHAUS[0]}
-MASK_LINEWIDTHS  = {r: ps.mask_linewidth() for r in MASK_REGIONS}
+# study-region globe (panel c): border width and label size in points
+GLOBE_BORDER_LW = 1.8     # was 1.0 (the yaml mask_linewidth_pt); raise for thicker borders
+GLOBE_LABEL_PT  = 11      # was 8 (NHL, NA, SA, SO)
+MASK_LINEWIDTHS  = {r: GLOBE_BORDER_LW for r in MASK_REGIONS}
 MASK_LINESTYLES  = {r: "solid" for r in MASK_REGIONS}
 MASK_ZORDERS     = {r: 4 for r in MASK_REGIONS}
 MASK_LAT_OFFSET  = {"NHL": 1.0, "NA": 0.5, "SA": 0.0, "SO": -0.5}
@@ -154,6 +157,12 @@ def _contour_levels(*fields):
     return np.arange(-vmax, vmax + LEVEL_STEP, LEVEL_STEP)
 
 
+def _panel_letter(ax, letter, x=-0.02, y=1.06):
+    """Bold panel letter at the top-left corner of an axes, e.g. "a)"."""
+    ax.text(x, y, letter, transform=ax.transAxes, ha="right", va="bottom",
+            fontweight="bold", fontsize=ps.font_base() + 1, clip_on=False)
+
+
 def _plot_panel(ax, lat, depth, sv, levels, title):
     cf = ax.contourf(lat, depth, sv,
                      levels=np.linspace(COLOR_MIN, COLOR_MAX, N_FILLED_LEVELS),
@@ -206,7 +215,7 @@ def _plot_globe(ax, lon_m, lat_m, masks):
         cx  = float(np.mean(lon2d[sel]))
         cy  = float(np.mean(lat2d[sel])) + MASK_LAT_OFFSET[name]
         txt = ax.text(cx, cy, name, transform=ccrs.PlateCarree(),
-                      color=MASK_COLORS[name], fontweight="bold", fontsize=ps.font_base(),
+                      color=MASK_COLORS[name], fontweight="bold", fontsize=GLOBE_LABEL_PT,
                       ha="center", va="center", zorder=20)
         txt.set_path_effects(
             [pe.withStroke(linewidth=2.5, foreground=MASK_HALO_COLOR)])
@@ -237,7 +246,9 @@ def make_figure(watermark=True):
     gs  = fig.add_gridspec(2, 3,
                             width_ratios=COLUMN_WIDTH_RATIOS,
                             height_ratios=[1, 1],
-                            wspace=0.35, hspace=0.15)
+                            wspace=0.35, hspace=ps.keep_gap(0.15, fig),
+                            bottom=0.7 / fig.get_figheight(),          # room for x label + watermark (inches)
+                            top=1 - 0.4 / fig.get_figheight())         # room for titles + panel letters
 
     ax_hist = fig.add_subplot(gs[0, 0])
     ax_hose = fig.add_subplot(gs[1, 0], sharex=ax_hist, sharey=ax_hist)
@@ -246,6 +257,8 @@ def make_figure(watermark=True):
                      RUN_DISPLAY_NAME.get(run_a, run_a))
     _plot_panel(ax_hose, lat_b, depth_b, sv_b, levels,
                 RUN_DISPLAY_NAME.get(run_b, run_b))
+    _panel_letter(ax_hist, "a)")
+    _panel_letter(ax_hose, "b)")
     ax_hist.set_xlabel("")
     plt.setp(ax_hist.get_xticklabels(), visible=False)
     ax_hist.tick_params(axis="x", which="both", length=0)
@@ -256,11 +269,13 @@ def make_figure(watermark=True):
     real_cax = fig.add_axes(cbar_ax.get_position())
     cbar = fig.colorbar(cf, cax=real_cax)
     cbar.set_label("Streamfunction (Sv)")
+    cbar.ax.yaxis.set_label_position("left")   # keeps the label off the globe panel
     cbar.set_ticks(np.arange(-10, 11, 2))
     cbar.outline.set_visible(False)
 
     ax_globe = fig.add_subplot(gs[:, 2], projection=GLOBE_PROJ)
     _plot_globe(ax_globe, lon_m, lat_m, masks)
+    _panel_letter(ax_globe, "c)", x=0.0, y=1.0)
 
     if watermark and WATERMARK_ON:
         fig.text(0.5, 0.008, WATERMARK, ha="center", va="bottom",

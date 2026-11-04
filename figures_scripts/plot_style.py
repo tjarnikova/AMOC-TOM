@@ -235,20 +235,23 @@ def apply_figure_style():
     })
 
 
-def figsize(code, design_w, design_h):
+def figsize(code, design_w, design_h, default_height_mm=None):
     """(width, height) in inches for the figure called `code`.
 
     design_w x design_h is the size the figure was originally laid out at.
     The width is page_width_mm (or the figure's own width_mm under `figures:`
     in figure_settings.yml). The height scales with the width so the panel
     arrangement is unchanged, unless the figure has its own height_mm.
-    Prints the final size in mm."""
+    default_height_mm: height to use when the figure has no height_mm of its own in the yaml
+    (the margins still scale from design_h). Prints the final size in mm."""
     cfg = load_settings()
     ov = cfg["figures"].get(code) or {}
     w_mm = float(ov.get("width_mm") or cfg["page_width_mm"])
     w = w_mm / 25.4
     if ov.get("height_mm"):
         h = float(ov["height_mm"]) / 25.4
+    elif default_height_mm:
+        h = float(default_height_mm) / 25.4
     else:
         h = design_h * w / design_w
     note = ""
@@ -265,6 +268,20 @@ def width_in(code):
     cfg = load_settings()
     ov = cfg["figures"].get(code) or {}
     return float(ov.get("width_mm") or cfg["page_width_mm"]) / 25.4
+
+
+def panel_letter(ax, letter, x=-0.02, y=1.06, ha="right"):
+    """Bold panel letter such as "a)" at the top-left corner of an axes. One size for every figure."""
+    ax.text(x, y, letter, transform=ax.transAxes, ha=ha, va="bottom",
+            fontweight="bold", fontsize=font_base() + 1, clip_on=False)
+
+
+def panel_letter_inside(ax, letter, x=0.04, y=0.96, alpha=0.75):
+    """Bold panel letter such as "a)" INSIDE the top-left corner of an axes (on top of a map),
+    on a semi-transparent white box so it stays readable over any colors."""
+    ax.text(x, y, letter, transform=ax.transAxes, ha="left", va="top", zorder=20,
+            fontweight="bold", fontsize=font_base() + 1,
+            bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=alpha))
 
 
 def keep_bottom(frac, fig):
