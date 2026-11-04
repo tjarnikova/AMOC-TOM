@@ -44,7 +44,7 @@ can differ slightly from what the maps show. Quote the table.
 Geometry check: nav_lat/nav_lon of the limitation files are compared with the mask file, inside the regions only.
 
 Run from figures_scripts:   python SF_LIMCOMP.py [--tau 0.01] [--suffix top14_annual] [--no-plot]
-Output: /gpfs/home/mep22dku/scratch/AMOC-TOM/plts/SF_LIMCOMP_YYYYMMDD.png and /gpfs/home/mep22dku/scratch/AMOC-TOM/plts/SF_LIMCOMP_regional_YYYYMMDD.csv
+Output: ./plts/SF_LIMCOMP_YYYYMMDD.png and ./plts/SF_LIMCOMP_regional_YYYYMMDD.csv
 """
 
 import sys
@@ -64,13 +64,13 @@ import map_maker as mm
 import TabK_summary as tk
 
 # -- tunable ---------------------------------------------------------------------------------------
-WATERMARK   = "/gpfs/home/mep22dku/scratch/AMOC-TOM/figures_scripts/SF_LIMCOMP.py"
-OUTPUT_DIR  = "/gpfs/home/mep22dku/scratch/AMOC-TOM/plts"
+WATERMARK   = "AMOC-eco/NEMO5/scripts/SF_LIMCOMP.py"
+OUTPUT_DIR  = "./plts"
 FIGURE_CODE = "SF_LIMCOMP"
 
 DEFAULT_SUFFIX = "top14_annual"      # top 14 levels (about 150 m), the same window as Fig 3
 DEFAULT_TAU    = 0.01                # |change| below this counts as "no clear change" (0..1 scale)
-REGIONS        = ["NHL", "NA", "SA", "SO", "AB"]
+REGIONS        = ["HA", "NA", "SA", "SO", "AB"]
 
 RATIO_MAX  = 2.0
 RATIO_CMAP = "BrBG"                  # diverging, centered on a ratio of 1
@@ -129,7 +129,7 @@ def load_native_geometry():
     masks = {}
     mask_lat = mask_lon = None
     with xr.open_dataset(tk.PROVINCE_MASK_PATH) as ma:
-        for name in ["NHL", "NA", "SA", "SO", "AB"]:
+        for name in ["HA", "NA", "SA", "SO", "AB"]:
             masks[name] = np.squeeze(ma[name].values).astype("f8")
         for cand in ("nav_lat", "lat", "latitude"):
             if cand in ma.variables and np.squeeze(ma[cand].values).ndim == 2:
