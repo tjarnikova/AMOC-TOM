@@ -70,7 +70,6 @@ Usage (from a notebook):
 
 import os
 import sys
-sys.path.append('/gpfs/home/mep22dku/scratch/SOZONE/UTILS')
 
 import numpy as np
 import pandas as pd
@@ -81,12 +80,13 @@ import seaborn as sns
 import cmocean
 
 from plot_style import set_presentation_style
+import plot_style as ps
 
 # ---------------------------------------------------------------------------
 # Data definitions
 # ---------------------------------------------------------------------------
 
-MODELS_CONFIG_PATH = "models.yml"
+MODELS_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models.yml")
 PTRC_FILENAME_TEMPLATE = "ORCA2_7d_clim_{clim_period}_ptrc_T_int.nc"  # native, pre-integrated at source
 DIAD_FILENAME_TEMPLATE = "ORCA2_7d_clim_{clim_period}_diad_T.nc"      # native RAW -- NOT _int, NOT _rg
 
@@ -153,7 +153,7 @@ VAR_UNIT_LABEL = {
     "cflx": "PgC/yr",
 }
 
-OUTPUT_DIR = "plts"
+OUTPUT_DIR = ps.output_dir()   # figure_settings.yml (was a relative "plts")
 CSV_FILENAME_TEMPLATE = "TabK_summary_{base_id}.csv"
 SUMMARY_TABLE_FILENAME_TEMPLATE = "TabK_summary_table_{base_id}.csv"
 PNG_FILENAME_TEMPLATE = "TabK_summary_{base_id}.png"

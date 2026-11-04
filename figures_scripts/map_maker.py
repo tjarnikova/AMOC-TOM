@@ -78,7 +78,6 @@ Usage (from a notebook):
 import os
 import sys
 import datetime
-sys.path.append('/gpfs/home/mep22dku/scratch/SOZONE/UTILS')
 
 import numpy as np
 import xarray as xr
@@ -96,20 +95,23 @@ except ImportError:
     _CMOCEAN_AVAILABLE = False
 
 from plot_style import set_presentation_style, BAUHAUS
+import plot_style as ps
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------------------------------------------------------
 # Data definitions
 # ---------------------------------------------------------------------------
 
-MODELS_CONFIG_PATH = "models.yml"
+MODELS_CONFIG_PATH = os.path.join(HERE, "models.yml")
 FILENAME_TEMPLATE = "ORCA2_7d_clim_{clim_period}_{filetype}_rg.nc"
 DEFAULT_FILETYPE = "diad_T"
 
-OUTPUT_DIR = "plts"
+OUTPUT_DIR = ps.output_dir()   # figure_settings.yml
 FILENAME_PREFIX = "MAP"
 
 # used only when make_figure(watermark=True) -- see that flag's docstring
-WATERMARK_BASE_PATH = "/gpfs/home/mep22dku/scratch/AMOC-eco/NEMO5/scripts"
+WATERMARK_BASE_PATH = "/gpfs/home/mep22dku/scratch/AMOC-TOM/figures_scripts"
 SCRIPT_NAME = "map_maker.py"
 
 # standard depth-dim name in this pipeline's regridded files -- see
@@ -181,7 +183,7 @@ def _paths_for_filetype(runs, filetype):
 # Region / projection
 # ---------------------------------------------------------------------------
 
-EXTENT_CONFIG_PATH = "map_extents.yml"
+EXTENT_CONFIG_PATH = os.path.join(HERE, "map_extents.yml")
 EXTENT_REGION = "atlantic"
 
 
@@ -205,7 +207,7 @@ MASK_COLORS = {
     "SA": BAUHAUS[1],
     "SO": BAUHAUS[0],
 }
-MASK_LINEWIDTHS = {"NHL": 1.8, "NA": 1.8, "SA": 1.8, "SO": 1.8}
+MASK_LINEWIDTHS = {r: ps.mask_linewidth() for r in MASK_REGIONS}   # figure_settings.yml
 MASK_LINESTYLES = {"NHL": "solid", "NA": "solid", "SA": "solid", "SO": "solid"}
 MASK_ZORDERS = {"NHL": 4, "NA": 4, "SA": 4, "SO": 4}
 MASK_LAT_OFFSET = {"NHL": 1.0, "NA": 0.5, "SA": 0.0, "SO": -0.5}
@@ -493,16 +495,16 @@ def make_figure(variable, d=0, filetype=DEFAULT_FILETYPE, cmap=None,
             caxes[i][j].axis("off")
             axes[i][j].text(0.5, 0.5, "render failed\n(see log)",
                              transform=axes[i][j].transAxes,
-                             ha="center", va="center", fontsize=9, color="0.5")
+                             ha="center", va="center", fontsize=ps.font_small(), color="0.5")
             continue
 
         cbar = fig.colorbar(mesh, cax=caxes[i][j], orientation="vertical")
         cbar.outline.set_visible(False)
         cbar.formatter = _value_formatter()
         cbar.update_ticks()
-        cbar.ax.tick_params(labelsize=plt.rcParams["font.size"] - 2)
+        cbar.ax.tick_params(labelsize=ps.font_small())
         if units:
-            cbar.set_label(units, fontsize=plt.rcParams["font.size"] - 2)
+            cbar.set_label(units, fontsize=ps.font_small())
 
     # column headers (top row only): BASE / HOSE-BASE
     axes[0][0].set_title(run_a, fontweight="bold")
@@ -521,7 +523,7 @@ def make_figure(variable, d=0, filetype=DEFAULT_FILETYPE, cmap=None,
         script_path = f"{WATERMARK_BASE_PATH}/{SCRIPT_NAME}"
         fig.text(
             0.5, 0.008, script_path, ha="center", va="bottom",
-            fontsize=plt.rcParams["font.size"] - 6, color="0.55",
+            fontsize=ps.font_watermark(), color="0.55",
         )
 
     date_str = datetime.date.today().strftime("%Y%m%d")

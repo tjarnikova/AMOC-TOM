@@ -1,37 +1,37 @@
 """
 MF_PHYS.py  —  Main Figure: Physical Response
 
-2 rows x 3 cols (or 4 cols with --with-ice), Atlantic-focused maps.
+2 rows x 4 cols (3 cols with --no-ice), Atlantic-focused maps.
     col 0 -- tos      (SST, cmap thermal)
     col 1 -- sos      (SSS, cmap haline, BASE row fixed to 30-37 psu)
     col 2 -- mldr10_1 (MLD, cmap deep)
-    col 3 -- icethic  (sea-ice thickness, cmap ice) -- only with --with-ice
+    col 3 -- icethic  (sea-ice thickness, cmap ice) -- left out with --no-ice
     row 0 -- CONTROL
     row 1 -- HOSE-CONTROL
 
-Run with `--with-ice` to append the sea-ice thickness column; omitted by
-default since it's still undecided whether ice belongs in this figure.
+The sea-ice thickness column is included by default. Run with `--no-ice` to leave it
+out. (`--with-ice` is still accepted and does nothing, so old commands keep working.)
 
-Output: /gpfs/home/mep22dku/scratch/AMOC-TOM/plts/MF_PHYS_YYYYMMDD.png (or MF_PHYS-ice_YYYYMMDD.png with --with-ice)
+Output: /gpfs/home/mep22dku/scratch/AMOC-TOM/plts/MF_PHYS_YYYYMMDD.png (or MF_PHYS-noice_YYYYMMDD.png with --no-ice)
 """
 
 import os
 import sys
 import argparse
 import datetime
-sys.path.append('/gpfs/home/mep22dku/scratch/AMOC-eco/NEMO5/scripts')
 
 import matplotlib.pyplot as plt
 import map_maker as mm
+import plot_style as ps
 
 # ── tunable ────────────────────────────────────────────────────────────
 WATERMARK      = "/gpfs/home/mep22dku/scratch/AMOC-TOM/figures_scripts/MF_PHYS.py"
-WATERMARK_ON   = True    # False = no script-path watermark (or run with --no-watermark / --water-off)
+WATERMARK_ON   = ps.watermark_from_settings()   # figure_settings.yml; --no-watermark / --water-off switch it off
 for _flag in ("--no-watermark", "--water-off"):
     if _flag in sys.argv:
         sys.argv.remove(_flag)
         WATERMARK_ON = False
-OUTPUT_DIR     = "/gpfs/home/mep22dku/scratch/AMOC-TOM/plts"
+OUTPUT_DIR     = ps.output_dir()   # figure_settings.yml
 FIGURE_CODE    = "MF_PHYS"
 
 GRID_T_FILETYPE = "grid_T"
@@ -47,12 +47,12 @@ COLUMNS = [
     ("mldr10_1", "deep",    "MLD",  "m",       None),
 ]
 
-# optional extra column, added only when --with-ice is passed
+# sea-ice column, included unless --no-ice is passed
 ICE_COLUMN = ("icethic", "ice", "Sea ice thickness", "m", None)
 
 # ── setup ──────────────────────────────────────────────────────────────
-def make_figure(watermark=True, with_ice=False):
-    mm.set_presentation_style()
+def make_figure(watermark=True, with_ice=True):
+    ps.apply_figure_style()
 
     columns = COLUMNS + [ICE_COLUMN] if with_ice else COLUMNS
 
@@ -64,10 +64,10 @@ def make_figure(watermark=True, with_ice=False):
     ice_paths = mm._paths_for_filetype(runs, ICEMOD_FILETYPE) if with_ice else None
 
     n_cols = len(columns)
-    fig = plt.figure(figsize=(3.4 * n_cols, 9.0))
+    fig = plt.figure(figsize=ps.figsize(FIGURE_CODE, 3.4 * n_cols, 9.0))
     outer_gs = fig.add_gridspec(2, n_cols, height_ratios=[3, 3],
-                                 hspace=0.18, wspace=0.06)
-    fig.subplots_adjust(top=0.94, bottom=0.07 if (watermark and WATERMARK_ON) else 0.03,
+                                 hspace=ps.keep_gap(0.18, fig), wspace=0.06)
+    fig.subplots_adjust(top=ps.keep_top(0.94, fig), bottom=ps.keep_bottom(0.07 if (watermark and WATERMARK_ON) else 0.03, fig),
                         left=0.06, right=0.99)
 
     diff_cmap = mm._resolve_cmap(None, mm.DIFF_CMAP_NAME, mm.DIFF_CMAP_FALLBACK)
@@ -112,7 +112,7 @@ def make_figure(watermark=True, with_ice=False):
                 print(f"[warn] {var} row {row} failed ({exc!r}) -- leaving blank")
                 ax.clear(); ax.axis("off"); cax.axis("off")
                 ax.text(0.5, 0.5, "render failed", transform=ax.transAxes,
-                        ha="center", va="center", fontsize=7, color="0.5")
+                        ha="center", va="center", fontsize=ps.font_small(), color="0.5")
                 continue
 
             if row == 0:
@@ -126,21 +126,22 @@ def make_figure(watermark=True, with_ice=False):
             cbar.outline.set_visible(False)
             cbar.formatter = mm._value_formatter()
             cbar.update_ticks()
-            cbar.ax.tick_params(labelsize=plt.rcParams["font.size"] - 2)
-            cbar.set_label(units, fontsize=plt.rcParams["font.size"] - 2)
+            cbar.ax.tick_params(labelsize=ps.font_small())
+            cbar.set_label(units, fontsize=ps.font_small())
 
     if watermark and WATERMARK_ON:
         fig.text(0.5, 0.008, WATERMARK, ha="center", va="bottom",
-                 fontsize=plt.rcParams["font.size"] - 6, color="0.55")
+                 fontsize=ps.font_watermark(), color="0.55")
 
     stamp = datetime.date.today().strftime("%Y%m%d")
     return fig, f"{FIGURE_CODE}_{stamp}.png"
 
 
-def save_figure(watermark=True, dpi=300, with_ice=False):
+def save_figure(watermark=True, dpi=None, with_ice=True):
+    dpi = dpi or ps.dpi()
     fig, fname = make_figure(watermark=watermark, with_ice=with_ice)
-    if with_ice:
-        fname = fname.replace(f"{FIGURE_CODE}_", f"{FIGURE_CODE}-ice_")
+    if not with_ice:
+        fname = fname.replace(f"{FIGURE_CODE}_", f"{FIGURE_CODE}-noice_")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     out = os.path.join(OUTPUT_DIR, fname)
     fig.savefig(out, bbox_inches="tight", dpi=dpi)
@@ -150,11 +151,12 @@ def save_figure(watermark=True, dpi=300, with_ice=False):
 
 def _parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--with-ice", action="store_true",
-                    help="add a 4th column for sea-ice thickness (icethic)")
+    p.add_argument("--no-ice", action="store_true",
+                    help="leave out the 4th column (sea-ice thickness, icethic)")
+    p.add_argument("--with-ice", action="store_true", help=argparse.SUPPRESS)   # old flag, now the default
     return p.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    save_figure(with_ice=args.with_ice)
+    save_figure(with_ice=not args.no_ice)

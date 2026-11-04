@@ -26,12 +26,13 @@ Outputs
   <clims>/<folder>/<RUN>_limiter_maps.nc   (with --unlimited-above 0.95: <RUN>_limiter_maps_lv95.nc, so nothing is overwritten)   native grid, same layout as <RUN>_limitation_maps.nc
         F_<Nut>_top<N>_{annual,monthly}, LV_top<N>_{annual,monthly}, W_top<N>_annual, Wmiss_frac_top<N>_annual
         F_<Nut>_<SP>_top<N>_annual, LV_<SP>_top<N>_annual, W_<SP>_top<N>_annual      (SP = DIA ... FIX)
-  ./plts/limiter_stats_top<N>_<date>.csv   long format: region, scope, metric, basis, ctrl, hose, delta
+  <output_dir>/limiter_stats_top<N>_<date>.csv   (output_dir from figure_settings.yml)   long format: region, scope, metric, basis, ctrl, hose, delta
 Then regrid the .nc exactly as you did for the limitation maps (-> <RUN>_limiter_maps_rg.nc).
 
 Usage:   python make_limiter_maps.py            # top 14 levels
          python make_limiter_maps.py --nlev 20
-Python 3.7; numpy, xarray, netCDF4. Keep SF_CARBCLOSE.py (mask reader) in the same folder.
+Python 3.7; numpy, xarray, netCDF4. The mask reader is built in (it used to be imported from
+SF_CARBCLOSE.py, which needs carb_port.py and is not part of this repository).
 """
 import argparse
 import csv
@@ -43,7 +44,9 @@ import warnings
 import numpy as np
 import xarray as xr
 
-import SF_CARBCLOSE as cc
+from netCDF4 import Dataset
+
+import plot_style as ps
 
 warnings.filterwarnings('ignore')
 
@@ -52,12 +55,44 @@ CLIMS = os.environ.get('LIM_CLIMS', '/gpfs/data/greenocean/users/mep22dku/clims'
 RUNS = [('HA01', 'TOM12_TJ_HA01'), ('HH01', 'TOM12_TJ_HH01')]     # control, hose
 PERIOD = '2010_2019'
 MESH = os.environ.get('LIM_MESH', '/gpfs/home/mep22dku/scratch/AMOC-eco/NEMO5/masks/meshmask_v5.nc')
-OUTDIR = './plts'
+MASKFILE = '/gpfs/home/mep22dku/scratch/AMOC-eco/NEMO5/masks/mask_atl_v5_5prov_NHL.nc'
+# region label -> candidate variable names in the mask file (first one found is used); 'HA' is the old name of NHL
+REGION_VARS = [('NHL', ['NHL', 'HA']), ('NA', ['NA']), ('SA', ['SA']), ('SO', ['SO'])]
+OUTDIR = ps.output_dir()      # figure_settings.yml
 # ------------------------------------------------------------------------------
 SPECIES = ['DIA', 'MIX', 'COC', 'PIC', 'PHA', 'FIX']
 NUT = [('Fe', 3), ('P', 4), ('Si', 5), ('N', 6)]
 CATS = list(NUT)          # becomes NUT + [('None', 0)] when --unlimited-above is used
 LV_SHARES = (0.90, 0.95, 0.99)
+
+
+def read_masks(shape):
+    """Boolean region masks on the native grid from MASKFILE (same reader as SF_CARBCLOSE.py).
+    Returns {label: bool array} for NHL, NA, SA, SO and AB (their union, only if all four exist)."""
+    masks = {}
+    if not os.path.exists(MASKFILE):
+        print('mask file not found, regional statistics skipped: %s' % MASKFILE)
+        return masks
+    nc = Dataset(MASKFILE)
+    print('mask file: %s' % MASKFILE)
+    print('  variables: %s' % ', '.join(sorted(nc.variables.keys())))
+    for label, cands in REGION_VARS:
+        name = next((c for c in cands if c in nc.variables), None)
+        if name is None:
+            print('  region %s: none of %s found, skipped' % (label, cands))
+            continue
+        m = np.ma.filled(nc.variables[name][:], 0).squeeze()
+        if m.shape != shape:
+            print('  region %s (%s): shape %s, expected %s, skipped' % (label, name, m.shape, shape))
+            continue
+        masks[label] = m > 0.5
+        print('  region %s <- %s, %d cells' % (label, name, masks[label].sum()))
+    nc.close()
+    if all(r in masks for r, _ in REGION_VARS):
+        masks['AB'] = np.any([masks[r] for r, _ in REGION_VARS], axis=0)   # NHL+NA+SA+SO
+    else:
+        print('  AB not built: needs all four regions')
+    return masks
 
 
 def top_levels(da, nlev):
@@ -175,17 +210,17 @@ def region_stats(acc, area, masks, ocean):
 
 
 def main():
+    global CATS, MASKFILE
     ap = argparse.ArgumentParser()
     ap.add_argument('--nlev', type=int, default=14)
-    ap.add_argument('--maskfile', default=cc.MASKFILE)
+    ap.add_argument('--maskfile', default=MASKFILE)
     ap.add_argument('--no-compare', action='store_true')
     ap.add_argument('--unlimited-above', type=float, default=0.0,
                     help='LV threshold above which a sample counts as not nutrient limited (0 = off)')
     args = ap.parse_args()
     nlev = args.nlev
     thr = args.unlimited_above
-    cc.MASKFILE = args.maskfile
-    global CATS
+    MASKFILE = args.maskfile
     CATS = list(NUT) + ([('None', 0)] if thr else [])
     tag = '' if not thr else '_lv%02d' % int(round(thr * 100))
     suff = 'top%d' % nlev
@@ -226,7 +261,7 @@ def main():
         results[label] = dict(acc=acc, ds=ds, folder=folder, d=d)
 
     shape2d = ocean.shape
-    masks = cc.read_masks(shape2d)
+    masks = read_masks(shape2d)
     labs = [r[0] for r in RUNS]
     stats = {}
     doms = {}

@@ -11,8 +11,6 @@ Output: /gpfs/home/mep22dku/scratch/AMOC-TOM/plts/MF_AMOC_YYYYMMDD.png
 import os
 import sys
 import datetime
-sys.path.append('/gpfs/home/mep22dku/scratch/AMOC-eco/NEMO5/scripts')
-sys.path.append('/gpfs/home/mep22dku/scratch/SOZONE/UTILS')
 
 import numpy as np
 import xarray as xr
@@ -23,16 +21,17 @@ import cmocean
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
-from plot_style import set_presentation_style, BAUHAUS
+import plot_style as ps
+from plot_style import BAUHAUS
 
 # ── tunable ────────────────────────────────────────────────────────────
 WATERMARK   = "/gpfs/home/mep22dku/scratch/AMOC-TOM/figures_scripts/MF_AMOC.py"
-WATERMARK_ON   = True    # False = no script-path watermark (or run with --no-watermark / --water-off)
+WATERMARK_ON   = ps.watermark_from_settings()   # figure_settings.yml; --no-watermark / --water-off switch it off
 for _flag in ("--no-watermark", "--water-off"):
     if _flag in sys.argv:
         sys.argv.remove(_flag)
         WATERMARK_ON = False
-OUTPUT_DIR  = "/gpfs/home/mep22dku/scratch/AMOC-TOM/plts"
+OUTPUT_DIR  = ps.output_dir()   # figure_settings.yml
 FIGURE_CODE = "MF_AMOC"
 
 MODELS_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models.yml")
@@ -66,7 +65,7 @@ MASK_PATH    = os.path.expanduser(
 MASK_REGIONS = ["NHL", "NA", "SA", "SO"]
 MASK_COLORS  = {"NHL": BAUHAUS[3], "NA": BAUHAUS[2],
                 "SA": BAUHAUS[1], "SO": BAUHAUS[0]}
-MASK_LINEWIDTHS  = {r: 1.8 for r in MASK_REGIONS}
+MASK_LINEWIDTHS  = {r: ps.mask_linewidth() for r in MASK_REGIONS}
 MASK_LINESTYLES  = {r: "solid" for r in MASK_REGIONS}
 MASK_ZORDERS     = {r: 4 for r in MASK_REGIONS}
 MASK_LAT_OFFSET  = {"NHL": 1.0, "NA": 0.5, "SA": 0.0, "SO": -0.5}
@@ -162,7 +161,7 @@ def _plot_panel(ax, lat, depth, sv, levels, title):
     cs = ax.contour(lat, depth, sv, levels=levels, colors="black",
                     linewidths=1.1,
                     linestyles=["dashed" if l < 0 else "solid" for l in levels])
-    ax.clabel(cs, inline=True, fontsize=9, fmt="%g")
+    ax.clabel(cs, inline=True, fontsize=ps.font_small(), fmt="%g")
     ax.set(xlim=(LAT_MIN, LAT_MAX), ylim=(DEPTH_MAX, 0),
            xlabel="Latitude (\u00b0N)", ylabel="Depth (m)", title=title)
     ax.spines["top"].set_visible(False)
@@ -207,7 +206,7 @@ def _plot_globe(ax, lon_m, lat_m, masks):
         cx  = float(np.mean(lon2d[sel]))
         cy  = float(np.mean(lat2d[sel])) + MASK_LAT_OFFSET[name]
         txt = ax.text(cx, cy, name, transform=ccrs.PlateCarree(),
-                      color=MASK_COLORS[name], fontweight="bold", fontsize=12,
+                      color=MASK_COLORS[name], fontweight="bold", fontsize=ps.font_base(),
                       ha="center", va="center", zorder=20)
         txt.set_path_effects(
             [pe.withStroke(linewidth=2.5, foreground=MASK_HALO_COLOR)])
@@ -216,7 +215,7 @@ def _plot_globe(ax, lon_m, lat_m, masks):
 
 # ── main figure ────────────────────────────────────────────────────────
 def make_figure(watermark=True):
-    set_presentation_style()
+    ps.apply_figure_style()
 
     labels, run_ids = _load_run_ids()
     run_a, run_b    = labels[:2]
@@ -234,7 +233,7 @@ def make_figure(watermark=True):
 
     lon_m, lat_m, masks = _load_masks()
 
-    fig = plt.figure(figsize=(FIG_WIDTH, FIG_WIDTH / GOLDEN_RATIO))
+    fig = plt.figure(figsize=ps.figsize(FIGURE_CODE, FIG_WIDTH, FIG_WIDTH / GOLDEN_RATIO))
     gs  = fig.add_gridspec(2, 3,
                             width_ratios=COLUMN_WIDTH_RATIOS,
                             height_ratios=[1, 1],
@@ -265,13 +264,14 @@ def make_figure(watermark=True):
 
     if watermark and WATERMARK_ON:
         fig.text(0.5, 0.008, WATERMARK, ha="center", va="bottom",
-                 fontsize=plt.rcParams.get("font.size", 10) - 6, color="0.55")
+                 fontsize=ps.font_watermark(), color="0.55")
 
     stamp = datetime.date.today().strftime("%Y%m%d")
     return fig, f"{FIGURE_CODE}_{stamp}.png"
 
 
-def save_figure(watermark=True, dpi=300):
+def save_figure(watermark=True, dpi=None):
+    dpi = dpi or ps.dpi()
     fig, fname = make_figure(watermark=watermark)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     out = os.path.join(OUTPUT_DIR, fname)
