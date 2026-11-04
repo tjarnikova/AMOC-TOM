@@ -1,0 +1,27 @@
+# Model run definitions -- edit this file to change which runs are plotted
+# (as BASE / HOSE, or add more labels / models entirely) without touching
+# any figure script.
+#
+# clim_dir must contain the outputs of running, for that model run:
+#   get_clim_v5.py, depth_integrate_v5.py, regrid_clim.sh
+# (see README.md in this folder for the full pre-processing steps.)
+#
+# clim_period is the climatology window used in the regridded filenames,
+# e.g. "2010_2019" -> ORCA2_7d_clim_2010_2019_grid_T_rg.nc
+#
+# NOTE: clim_period / amoc_period MUST be quoted -- unquoted, YAML reads
+# 2010_2019 as the integer 20102019 (underscore = digit separator), which
+# is exactly what caused the "20102019" typo in the filename.
+
+runs:
+  BASE:
+    run_id: TOM12_TJ_HA01
+    clim_dir: /gpfs/data/greenocean/users/mep22dku/clims/TOM12_TJ_HA01/
+    clim_period: "2010_2019"
+  HOSE:
+    run_id: TOM12_TJ_HH01
+    clim_dir: /gpfs/data/greenocean/users/mep22dku/clims/TOM12_TJ_HH01/
+    clim_period: "2010_2019"
+
+# AMOC timeseries covers the whole run, not just the climatology window
+amoc_period: "1940_2024"

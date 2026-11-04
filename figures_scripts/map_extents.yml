@@ -1,0 +1,23 @@
+# Shared map extents -- one entry per named region, reused across figure
+# scripts so every map plotted from this region uses the same bounds.
+#
+# Add new regions here as more figures come online; each script just reads
+# the block it needs by name.
+
+north_atlantic:
+  lon_min: -85
+  lon_max: 3
+  lat_min: 10
+  lat_max: 85
+ 
+global:
+  lon_min: -180
+  lon_max: 180
+  lat_min: -90
+  lat_max: 90
+ 
+atlantic:
+  lon_min: -80
+  lon_max: 21
+  lat_min: -80
+  lat_max: 70
