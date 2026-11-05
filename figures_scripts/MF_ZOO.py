@@ -78,6 +78,7 @@ FULL_HEIGHT_MM = 140      # Fig 6 height (yaml: figures: MF_ZOO_full: {height_mm
 FULL_TOP_IN, FULL_BOTTOM_IN, FULL_GAP_IN = 0.50, 0.85, 0.60   # top margin, bottom margin (x labels + legend), gap between the rows
 FULL_SPACER = 0.30         # width of the spacer between the maps and the profiles (room for the latitude label)
 FULL_WSPACE = 0.20        # gap between columns, as a fraction of a column
+FULL_LEGEND_Y_IN = 0.25    # Fig 6 legend: height of its bottom edge above the figure bottom, inches (larger = closer to the x labels)
 
 ROW_LABELS  = ["CONTROL", "HOSE\u2212CONTROL"]
 ROW_LABEL_X = -0.12
@@ -478,14 +479,14 @@ def draw_overview_panels(ax_s, ax_f, ax_h, ax_bs, ax_bf, ax_hc):
     ax_bs.set_ylabel("Latitude ($^\\circ$N)")
     add_regions(list(all_ax), [ax_h, ax_hc])
 
-def _overview_legend(fig, x):
+def _overview_legend(fig, x, y=0.02):
     from matplotlib.lines import Line2D
     handles = [Line2D([0], [0], color=C_PHY, lw=ps.line_width()),
                Line2D([0], [0], color=C_ZOO, lw=ps.line_width()),
                Line2D([0], [0], color=C_PHY, lw=ps.line_width(), ls=":"),
                Line2D([0], [0], color=C_ZOO, lw=ps.line_width(), ls=":")]
     fig.legend(handles, ["PHY biomass", "ZOO biomass", "PP", "Zooplankton grazing"],
-               loc="lower center", bbox_to_anchor=(x, 0.02), ncol=4, frameon=False,
+               loc="lower center", bbox_to_anchor=(x, y), ncol=4, frameon=False,
                fontsize=ps.font_small())
 
 def fig_overview():
@@ -553,7 +554,9 @@ def fig_full():
         for ax, txt in ((map_axes[0][0], "a)"), (map_axes[0][1], "b)"), (ax_s, "c)"), (ax_f, "d)"), (ax_h, "e)"),
                         (map_axes[1][0], "f)"), (map_axes[1][1], "g)"), (ax_bs, "h)"), (ax_bf, "i)"), (ax_hc, "j)")):
             ps.panel_letter_inside(ax, txt)
-    _overview_legend(fig, 0.68)
+    # legend centered under the profile block (panels c to j), close to the x labels
+    x_mid = 0.5 * (ax_s.get_position().x0 + ax_h.get_position().x1)
+    _overview_legend(fig, x_mid, FULL_LEGEND_Y_IN / H)
     finish(fig, "full")
     return fig
 
