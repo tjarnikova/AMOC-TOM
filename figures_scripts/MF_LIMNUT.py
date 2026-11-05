@@ -59,6 +59,7 @@ NUTS = ['Fe', 'N', 'P', 'Si']                    # column / legend order (None f
 COLORS = {'Fe': '#d95f02', 'N': '#5f8a4f', 'P': '#7570b3', 'Si': '#2f6690',      # burnt orange, moss, violet, Bauhaus blue
           'None': '#b8a48c', 'mixed': '#525252', 'no change': '#ececec'}          # taupe
 ROW_LABEL_X = -0.18
+DEFAULT_HEIGHT_MM = 135    # same as MF_PRIM (Fig 4); yaml: figures: MF_LIMNUT_assemblage: {height_mm: ...} overrides
 LV_BASE_CMAP, LV_DIFF_CMAP = 'Greys_r', 'PuOr'      # as MF_PRIM: lighter = less limited
 SUFFIX = args.suffix
 WATER_ON = ps.watermark_from_settings() and not args.no_watermark   # yaml switch; flags only switch it off
@@ -159,8 +160,9 @@ def cont_cbar(fig, mesh, cax, label=None):
 
 
 def cell(fig, gs_cell, wide=False):
-    inner = gs_cell.subgridspec(2, 1, height_ratios=[1, 0.07], hspace=0.06)
+    inner = gs_cell.subgridspec(2, 1, height_ratios=[1, 0.06], hspace=0.06)      # same as MF_PRIM
     ax = fig.add_subplot(inner[0, 0], projection=mm.ATLANTIC_PROJ)
+    ax.set_anchor('S')      # map sits on its colorbar strip when the cell is taller than the map (as MF_PRIM)
     wr = [0.01, 0.98, 0.01] if wide else [0.15, 0.70, 0.15]          # categorical bars need the width for their labels
     cb = inner[1, 0].subgridspec(1, 3, width_ratios=wr, wspace=0)
     return ax, fig.add_subplot(cb[0, 1])
@@ -278,10 +280,10 @@ def main():
     diff_cmap = mm._resolve_cmap(None, mm.DIFF_CMAP_NAME, mm.DIFF_CMAP_FALLBACK)
 
     ncols = len(cats) + 1
-    fig = plt.figure(figsize=ps.figsize('MF_LIMNUT_assemblage', 2.5 * ncols + 0.6, 8.6))
-    gs = fig.add_gridspec(2, ncols, hspace=ps.keep_gap(0.20, fig), wspace=0.03,
+    fig = plt.figure(figsize=ps.figsize('MF_LIMNUT_assemblage', 3.4 * ncols, 9.0, default_height_mm=DEFAULT_HEIGHT_MM))
+    gs = fig.add_gridspec(2, ncols, hspace=ps.keep_gap(0.18, fig), wspace=0.06,
                           width_ratios=[1.0] * (ncols - 1) + [1.3])      # last column a bit wider for its colorbar labels
-    fig.subplots_adjust(top=ps.keep_top(0.93, fig), bottom=ps.keep_bottom(0.07 if WATER_ON else 0.03, fig), left=0.03, right=0.99)
+    fig.subplots_adjust(top=ps.keep_top(0.94, fig), bottom=ps.keep_bottom(0.07 if WATER_ON else 0.03, fig), left=0.03, right=0.99)
     for j, c in enumerate(cats):
         seq = LinearSegmentedColormap.from_list(c, ['#ffffff', COLORS[c]])
         for row, (data, cm, lo, hi, lab) in enumerate([
@@ -299,6 +301,7 @@ def main():
                 cax.axis('off')
             else:
                 cont_cbar(fig, mesh, cax, lab)
+                fit_cbar_to_map(ax, cax)      # colorbar as wide as its map, as MF_PRIM
     cm_cat = ListedColormap(colors)
     ax, cax = cell(fig, gs[0, ncols - 1], wide=True)
     panel(ax, lon, lat, dom[ca], cm_cat, -0.5, len(names) - 0.5, ctx, 'dominant control',
