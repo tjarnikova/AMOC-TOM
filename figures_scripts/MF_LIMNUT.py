@@ -120,11 +120,14 @@ CAT_LABELS = {'mixed': 'mix'}          # shorter label on the categorical colorb
 CAT_LABEL_PT = ps.font_small() - 1      # their label size (pt, 6 with the default 7); six labels must fit under one map width
 
 
-def fit_cbar_to_map(ax, cax):
-    '''Make a colorbar exactly as wide as its map.'''
+CBAR_FRAC = 0.85      # continuous colorbars: this fraction of the map width, centered (1.0 = full map width); keeps 1.0 and 0.0 of neighbors apart
+
+
+def fit_cbar_to_map(ax, cax, frac=1.0):
+    '''Make a colorbar frac times as wide as its map, centered under it.'''
     ax.apply_aspect()
     p, cp = ax.get_position(), cax.get_position()
-    cax.set_position([p.x0, cp.y0, p.width, cp.height])
+    cax.set_position([p.x0 + 0.5 * p.width * (1.0 - frac), cp.y0, p.width * frac, cp.height])
 
 
 def cat_cbar(fig, cax, names, colors):
@@ -282,7 +285,7 @@ def main():
     ncols = len(cats) + 1
     fig = plt.figure(figsize=ps.figsize('MF_LIMNUT_assemblage', 3.4 * ncols, 9.0, default_height_mm=DEFAULT_HEIGHT_MM))
     gs = fig.add_gridspec(2, ncols, hspace=ps.keep_gap(0.18, fig), wspace=0.06,
-                          width_ratios=[1.0] * (ncols - 1) + [1.3])      # last column a bit wider for its colorbar labels
+                          width_ratios=[1.0] * ncols)      # equal columns, so every map is the same size
     fig.subplots_adjust(top=ps.keep_top(0.94, fig), bottom=ps.keep_bottom(0.07 if WATER_ON else 0.03, fig), left=0.03, right=0.99)
     for j, c in enumerate(cats):
         seq = LinearSegmentedColormap.from_list(c, ['#ffffff', COLORS[c]])
@@ -301,7 +304,7 @@ def main():
                 cax.axis('off')
             else:
                 cont_cbar(fig, mesh, cax, lab)
-                fit_cbar_to_map(ax, cax)      # colorbar as wide as its map, as MF_PRIM
+                fit_cbar_to_map(ax, cax, CBAR_FRAC)
     cm_cat = ListedColormap(colors)
     ax, cax = cell(fig, gs[0, ncols - 1], wide=True)
     panel(ax, lon, lat, dom[ca], cm_cat, -0.5, len(names) - 0.5, ctx, 'dominant control',
